@@ -39,11 +39,110 @@
 
   Testing the server - run `npm run test-todoServer` command in terminal
  */
-  const express = require('express');
-  const bodyParser = require('body-parser');
-  
-  const app = express();
-  
-  app.use(bodyParser.json());
-  
-  module.exports = app;
+const express = require('express');
+const bodyParser = require('body-parser');
+const fs = require('fs');
+const util = require('util');
+const readFileAsync = util.promisify(fs.readFile);
+const writeFileAsync = util.promisify(fs.writeFile);
+const app = express();
+
+app.use(bodyParser.json());
+
+app.get('/todos', async (req, res) => {
+  try {
+    // Read todo items from the file
+    const data = await readFileAsync('todos.json', 'utf8');
+    const todos = JSON.parse(data);
+
+    // Send the todo items as a JSON response
+    res.status(200).json(todos);
+  } catch (error) {
+    console.error('Error retrieving todo items:', error);
+    res.status(500).send('Internal Server Error');
+  }
+});
+
+app.get('/todos/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const data = await readFileAsync('todos.json', 'utf8');
+    const todos = JSON.parse(data);
+    const foundTodo = todos.find((todo) => todo.id === id);
+    if (!foundTodo) {
+      res.status(404).send('Todo not found');
+      return;
+    }
+    res.json(foundTodo);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).send('Internal Server Error');
+  }
+});
+
+app.post('/todos', async (req, res) => {
+  try {
+    const newTodo = {
+      id: Math.floor(Math.random() * 1000000).toString(), // Convert to string
+      title: req.body.title,
+      description: req.body.description,
+    };
+    let todos = [];
+    try {
+      const data = await readFileAsync('todos.json', 'utf8');
+      todos = JSON.parse(data);
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        throw error;
+      }
+    }
+    todos.push(newTodo);
+    await writeFileAsync('todos.json', JSON.stringify(todos));
+    res.status(201).send(newTodo);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).send('Internal Server Error');
+  }
+});
+
+app.put('/todos/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    let data = await readFileAsync('todos.json', 'utf8');
+    data = JSON.parse(data);
+    const foundIndex = data.findIndex((todo) => todo.id === id);
+    if (foundIndex === -1) {
+      res.status(404).send('Todo not found');
+      return;
+    }
+    data[foundIndex].title = req.body.title || data[foundIndex].title;
+    data[foundIndex].description =
+      req.body.description || data[foundIndex].description;
+    await writeFileAsync('todos.json', JSON.stringify(data));
+    res.status(200).send(data[foundIndex]);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).send('Internal Server Error');
+  }
+});
+
+/** 5. DELETE /todos/:id - Delete a todo item by ID
+    Description: Deletes a todo item identified by its ID.
+    Response: 200 OK if the todo item was found and deleted, or 404 Not Found if not found.
+    Example: DELETE http://localhost:3000/todos/123
+
+    - For any other route not defined in the server return 404
+
+  Testing the server - run `npm run test-todoServer` command in terminal */
+app.delete('/todos/:id', async (req, res) => {
+  let data = await readFileAsync('todos.json', 'utf8');
+  data = JSON.parse(data);
+  let delData = data.filter((ds) => ds.id !== req.params.id);
+  if (delData === data) {
+    res.status(404).send();
+    return;
+  }
+  await writeFileAsync('todos.json', JSON.stringify(delData));
+  res.status(200).send();
+});
+module.exports = app;
